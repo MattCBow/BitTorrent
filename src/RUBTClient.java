@@ -4,19 +4,18 @@
 import java.net.*;
 import java.io.*;
 import java.nio.file.*;
+import java.nio.ByteBuffer;
+import java.util.*;
+import java.lang.*;
+
 import GivenTools.*;
-import java.util.Random;
 
 
 public class RUBTClient {
 
     public static void main(String[] args) throws Exception {
 
-        //Checks arguments
-        String torrentSuffix = "";
-        if(args[0].length()>=8) torrentSuffix = args[0].substring(args[0].length() -8);
-
-        if ( args.length != 2 || !torrentSuffix.equals(".torrent") ) {
+        if ( args.length != 2 || args[0].length()<8 || !args[0].substring(args[0].length() -8).equals(".torrent") ) {
           System.out.println("Usage: java -cp . RUBTClient <torrent> <destination>");
           return;
         }
@@ -25,20 +24,70 @@ public class RUBTClient {
           byte[] torrentBytes = Files.readAllBytes(new File(args[0]).toPath());
           TorrentInfo torrent = new TorrentInfo(torrentBytes);
 
-          String infohash = "";
-          for (int i = 0; i < 20; i++) {
-            byte b = torrent.info_hash.array()[i];
-            infohash += "%"+String.format("%02x", b & 0xff);
+          String info_hash = "";
+          for (byte b : torrent.info_hash.array() ) {
+            info_hash += "%"+String.format("%02x", b & 0xff);
           }
 
-          String peerId = getRandomPeerId();
+    	    String peer_id = "MCB";
+          Random r = new Random();
+      	  for (int i = 3; i < 20; i++){
+      	    peer_id += r.nextInt(10);
+      	  }
 
-          URL url = new URL(torrent.announce_url.toString()+"?info_hash="+infohash+"&peer_id="+peerId+"&port="
+          URL url = new URL(torrent.announce_url.toString()+"?info_hash="+info_hash+"&peer_id="+peer_id+"&port="
                             +torrent.announce_url.getPort()+"&uploaded=0&downloaded=0&left="+torrent.file_length);
-          System.out.println("URL: "+url);
+          System.out.println("URL: "+url+"\n");
 
+          HttpURLConnection con = (HttpURLConnection) url.openConnection();
+          con.setRequestMethod("GET");
+          DataInputStream dis = new DataInputStream(con.getInputStream());
+          byte[] httpResponse = new byte[con.getContentLength()];
+          dis.readFully(httpResponse);
+          dis.close();
 
+          String ruPeerId = "";
+          String ruPeerIP = "";
+          int ruPeerPort = 0;
 
+          HashMap<ByteBuffer,Object> tracker = (HashMap<ByteBuffer, Object>) Bencoder2.decode(httpResponse);
+          ArrayList<HashMap<ByteBuffer,Object>> peerArrayList = (ArrayList<HashMap<ByteBuffer, Object>>) tracker.get(ByteBuffer.wrap("peers".getBytes()));
+          Iterator<HashMap<ByteBuffer,Object>> it = peerArrayList.iterator();
+
+		      while (ruPeerPort==0 && it.hasNext()) {
+            HashMap<ByteBuffer,Object> peer = (HashMap<ByteBuffer, Object>) it.next();
+            ruPeerId = new String(((ByteBuffer)peer.get(ByteBuffer.wrap("peer id".getBytes()))).array());
+            if(ruPeerId.substring(0,6).contains("RU")){
+              ruPeerIP = new String(((ByteBuffer)peer.get(ByteBuffer.wrap("ip".getBytes()))).array());
+              ruPeerPort = (Integer) peer.get(ByteBuffer.wrap("port".getBytes()));
+            }
+          }
+
+          System.out.println("\nID: "+ruPeerId+"\nIP: "+ruPeerIP+"\nPort: "+ruPeerPort);
+
+          Socket soc = new Socket(ruPeerIP,ruPeerPort);
+          OutputStream out = soc.getOutputStream();
+          InputStream in = soc.getInputStream();
+
+          byte[] handshake = new byte[68];
+          byte[] resp = new byte[68];
+          byte[] header = {19,'B','i','t','T','o','r','r','e','n','t',' ','p','r','o','t','o','c','o','l',0,0,0,0,0,0,0,0};
+
+          System.arraycopy(header, 0, handshake, 0, 28);
+          System.arraycopy(torrent.info_hash.array(), 0, handshake,28 , 20);
+		      System.arraycopy(peer_id.getBytes(), 0, handshake,48 , 20);
+
+          out.write(handshake);
+    	    in.read(resp);
+
+          out.close();
+          in.close();
+          soc.close();
+
+          System.out.println("\nOUT:"+handshake+"\nIN:"+resp+"\n");
+          for (byte b: resp) {
+            System.out.print((char) b+" ");
+          }
 
         }
         catch (NoSuchFileException noFile) {
@@ -52,61 +101,6 @@ public class RUBTClient {
         catch (Exception e){
           System.out.println(e.getMessage());
         }
-        /*
-        int port = Integer.parseInt(args[0]);
 
-        try{
-          // create socket
-          ServerSocket server = new ServerSocket(port);
-          System.out.println("Server opened on "+port);
-
-          // repeatedly wait for connections, and process
-          while (true) {
-
-            // a "blocking" call which waits until a connection is requested
-            Socket client = server.accept();
-            System.out.println("Accepted connection from client at " +client.getRemoteSocketAddress());
-
-            // open up IO streams
-            PrintWriter out = new PrintWriter(client.getOutputStream(), true);
-            BufferedReader in = new BufferedReader(new InputStreamReader(client.getInputStream()));
-
-            // waits for data and reads it in until connection dies
-            String input;
-            while( !(input = in.readLine()).equals("#") && !input.equals("$") ) {
-                System.out.println(input);
-                String reverse =  new StringBuffer(input).reverse().toString();
-                out.println(reverse);
-            }
-
-            // close IO streams, then socket
-            System.out.println("Closing connection");
-            out.close();
-            in.close();
-            client.close();
-          }
-        }
-        catch (IOException e) {
-            System.out.println("Exception caught listening on port " + port);
-            System.out.println(e.getMessage());
-        }
-        */
-    }
-
-    public static String getRandomPeerId()
-    {
-	    Random rand = new Random();
-	    int min = 97;
-	    int max = 122;
-	    String peerId = "";
-	    for (int i = 0; i < 20; i++)
-	    {
-	    	int randInt = rand.nextInt((max - min) + 1) + min;
-	    	char c = (char) randInt;
-	    	peerId += c;
-	    }
-      if(peerId.substring(0,4).toUpperCase().equals("RUBT"))peerId=getRandomPeerId();
-
-	    return peerId.toUpperCase();
     }
 }
