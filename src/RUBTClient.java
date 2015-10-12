@@ -50,7 +50,7 @@ public class RUBTClient {
               my_peer_port++;
             }
             if(my_peer_port>6899){
-              System.err.println("No open ports, exiting program");
+              System.err.println("Unable to open any ports");
               throw new IOException();
             }
           }
@@ -73,14 +73,14 @@ public class RUBTClient {
                                   +"&uploaded=0"
                                   +"&downloaded=0"
                                   +"&left="+torrent.file_length);
-          System.out.println("URL: "+tracker_url+"\n");
+          System.out.println("\nURL: "+tracker_url);
 
           //Send http request to the tracker
           HttpURLConnection http_connection = (HttpURLConnection) tracker_url.openConnection();
           http_connection.setRequestMethod("GET");
           in = new DataInputStream(http_connection.getInputStream());
           byte[] http_response = new byte[http_connection.getContentLength()];
-          in.readFully(http_response);
+          in.read(http_response);
           in.close();
 
           //Get list of peers from tracker
@@ -102,7 +102,11 @@ public class RUBTClient {
               ru_peer_port = (Integer) peer.get(ByteBuffer.wrap("port".getBytes()));
             }
           }
-          System.out.println("\nID: "+ru_peer_id+"\nIP: "+ru_peer_ip+"\nPort: "+ru_peer_port);
+
+          //Print Connect Summary
+          System.out.println("ID: "+ru_peer_id+"\nIP: "+ru_peer_ip+"\nPort: "+ru_peer_port);
+          System.out.println("ID: "+my_peer_id+"\nIP: "+my_peer_ip+"\nPort: "+my_peer_port);
+
 
           //Open Connection with RU Peer
           socket = new Socket(ru_peer_ip,ru_peer_port);
@@ -110,29 +114,64 @@ public class RUBTClient {
           out = new DataOutputStream(socket.getOutputStream());
 
           //Intialize Handshake
-          byte[] handshake = new byte[68];
-          byte[] resp = new byte[68];
+          byte[] handshake_message = new byte[68];
+          byte[] handshake_response = new byte[68];
           byte[] header = {19,'B','i','t','T','o','r','r','e','n','t',' ','p','r','o','t','o','c','o','l',0,0,0,0,0,0,0,0};
-          System.arraycopy(header, 0, handshake, 0, 28);
-          System.arraycopy(torrent.info_hash.array(), 0, handshake,28 , 20);
-		      System.arraycopy(my_peer_id.getBytes(), 0, handshake,48 , 20);
+          System.arraycopy(header, 0, handshake_message, 0, 28);
+          System.arraycopy(torrent.info_hash.array(), 0, handshake_message,28 , 20);
+		      System.arraycopy(my_peer_id.getBytes(), 0, handshake_message,48 , 20);
 
           //Send handshake
-          out.write(handshake);
-    	    in.read(resp);
-          out.close();
-          in.close();
-          socket.close();
+          out.write(handshake_message);
+    	    in.read(handshake_response);
 
           //Verify Handshake
           boolean valid_handshake = true;
-          if(!Arrays.equals(header,Arrays.copyOfRange(resp,0,28)))valid_handshake = false;
-          if(!Arrays.equals(torrent.info_hash.array(),Arrays.copyOfRange(resp,28,48)))valid_handshake = false;
-          if(!ru_peer_id.equals(new String( Arrays.copyOfRange(resp,48,68) , "UTF-8")))valid_handshake = false;
-          System.out.println("\nHANDSHAKE: "+valid_handshake);
+          if(!Arrays.equals(header,Arrays.copyOfRange(handshake_response,0,28)))valid_handshake = false;
+          if(!Arrays.equals(torrent.info_hash.array(),Arrays.copyOfRange(handshake_response,28,48)))valid_handshake = false;
+          if(!ru_peer_id.equals(new String( Arrays.copyOfRange(handshake_response,48,68) , "UTF-8")))valid_handshake = false;
+          if(valid_handshake)System.out.println("handshake Message Validated");
 
+          int length = 4;
+          byte[] interest_message = {0x00,0x00,0x00,0x01,0x02};
+          byte[] response_length = new byte[length];
+          out.write(interest_message);
+          if(interest_message[4]==0x02)System.out.println("Interest Message Sent");
 
+          in.read(response_length);
+          length = java.nio.ByteBuffer.wrap(response_length).getInt();
+          byte[] bitfield_message = new byte[length];
+          in.read(bitfield_message);
+          if(bitfield_message[0]==0x05)System.out.println("Bitfield Message Recieved");
 
+          out.write(interest_message);
+          in.read(response_length);
+          length = java.nio.ByteBuffer.wrap(response_length).getInt();
+          byte[] unchoke_message = new byte[length];
+          in.read(unchoke_message);
+          if(unchoke_message[0]==0x01)System.out.println("Unchoked Message Recieved");
+
+          byte[] request_message = new byte[17];
+          byte[] length_prefix = ByteBuffer.allocate(4).putInt(13).array();
+          byte[] message_id = {0x07};
+          byte[] payload_index = ByteBuffer.allocate(4).putInt(0).array();
+          byte[] payload_begin = ByteBuffer.allocate(4).putInt(0).array();
+          byte[] payload_length = ByteBuffer.allocate(4).putInt(torrent.piece_length).array();
+
+          System.arraycopy(length_prefix, 0, request_message, 0, 4);
+          System.arraycopy(message_id, 0, request_message, 4 , 1);
+		      System.arraycopy(payload_index, 0, request_message,5 , 4);
+          System.arraycopy(payload_begin, 0, request_message,9 , 4);
+		      System.arraycopy(payload_length, 0, request_message,13 , 4);
+
+          System.out.print("\nREQUEST MESSAGE: ");
+          for (byte b: request_message ) System.out.printf("0x%02X ", b);
+          System.out.println();
+
+          out.close();
+          in.close();
+          socket.close();
+          server_socket.close();
         }
         catch (NoSuchFileException no_file) {
             System.out.println("Exception caught opening file");
@@ -142,9 +181,12 @@ public class RUBTClient {
             System.out.println("Exception caught reading file");
             System.out.println(tor_file.getMessage());
         }
+        catch (IOException ioe){
+          System.out.println(ioe.getMessage());
+        }
         catch (Exception e){
           System.out.println(e.getMessage());
         }
-
+        System.out.println("Exiting Program");
     }
 }
