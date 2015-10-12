@@ -7,6 +7,7 @@ import java.nio.file.*;
 import java.nio.ByteBuffer;
 import java.util.*;
 import java.lang.*;
+import java.security.*;
 
 import GivenTools.*;
 
@@ -103,7 +104,7 @@ public class RUBTClient {
             }
           }
 
-          //Print Connect Summary
+          //Print Connection Summary
           System.out.println("ID: "+ru_peer_id+"\nIP: "+ru_peer_ip+"\nPort: "+ru_peer_port);
           System.out.println("ID: "+my_peer_id+"\nIP: "+my_peer_ip+"\nPort: "+my_peer_port);
 
@@ -116,27 +117,28 @@ public class RUBTClient {
           //Intialize Handshake
           byte[] handshake_message = new byte[68];
           byte[] handshake_response = new byte[68];
-          byte[] header = {19,'B','i','t','T','o','r','r','e','n','t',' ','p','r','o','t','o','c','o','l',0,0,0,0,0,0,0,0};
-          System.arraycopy(header, 0, handshake_message, 0, 28);
+          byte[] handshake_header = {19,'B','i','t','T','o','r','r','e','n','t',' ','p','r','o','t','o','c','o','l',0,0,0,0,0,0,0,0};
+          System.arraycopy(handshake_header, 0, handshake_message, 0, 28);
           System.arraycopy(torrent.info_hash.array(), 0, handshake_message,28 , 20);
 		      System.arraycopy(my_peer_id.getBytes(), 0, handshake_message,48 , 20);
 
           //Send handshake
           out.write(handshake_message);
     	    in.read(handshake_response);
+          System.out.println("Handshake Message Sent");
 
           //Verify Handshake
           boolean valid_handshake = true;
-          if(!Arrays.equals(header,Arrays.copyOfRange(handshake_response,0,28)))valid_handshake = false;
+          if(!Arrays.equals(handshake_header,Arrays.copyOfRange(handshake_response,0,28)))valid_handshake = false;
           if(!Arrays.equals(torrent.info_hash.array(),Arrays.copyOfRange(handshake_response,28,48)))valid_handshake = false;
           if(!ru_peer_id.equals(new String( Arrays.copyOfRange(handshake_response,48,68) , "UTF-8")))valid_handshake = false;
-          if(valid_handshake)System.out.println("handshake Message Validated");
+          if(valid_handshake)System.out.println("Handshake Message Validated");
 
           int length = 4;
           byte[] interest_message = {0x00,0x00,0x00,0x01,0x02};
           byte[] response_length = new byte[length];
           out.write(interest_message);
-          if(interest_message[4]==0x02)System.out.println("Interest Message Sent");
+          System.out.println("Interest Message Sent");
 
           in.read(response_length);
           length = java.nio.ByteBuffer.wrap(response_length).getInt();
@@ -145,28 +147,41 @@ public class RUBTClient {
           if(bitfield_message[0]==0x05)System.out.println("Bitfield Message Recieved");
 
           out.write(interest_message);
+          System.out.println("Interest Message Sent");
+
           in.read(response_length);
           length = java.nio.ByteBuffer.wrap(response_length).getInt();
           byte[] unchoke_message = new byte[length];
           in.read(unchoke_message);
           if(unchoke_message[0]==0x01)System.out.println("Unchoked Message Recieved");
 
+          int piece_index=0;
           byte[] request_message = new byte[17];
-          byte[] length_prefix = ByteBuffer.allocate(4).putInt(13).array();
-          byte[] message_id = {0x07};
-          byte[] payload_index = ByteBuffer.allocate(4).putInt(0).array();
-          byte[] payload_begin = ByteBuffer.allocate(4).putInt(0).array();
-          byte[] payload_length = ByteBuffer.allocate(4).putInt(torrent.piece_length).array();
+          byte[] request_header = {0x00,0x00,0x00,0x11,0x06};
+          System.arraycopy(request_header, 0, request_message, 0 , 5);
+		      System.arraycopy(ByteBuffer.allocate(4).putInt(piece_index).array(), 0, request_message,5 , 4);
+          System.arraycopy(ByteBuffer.allocate(4).putInt(0).array(), 0, request_message,9 , 4);
+		      System.arraycopy(ByteBuffer.allocate(4).putInt(torrent.piece_length).array(), 0, request_message,13 , 4);
 
-          System.arraycopy(length_prefix, 0, request_message, 0, 4);
-          System.arraycopy(message_id, 0, request_message, 4 , 1);
-		      System.arraycopy(payload_index, 0, request_message,5 , 4);
-          System.arraycopy(payload_begin, 0, request_message,9 , 4);
-		      System.arraycopy(payload_length, 0, request_message,13 , 4);
+          out.write(request_message);
 
-          System.out.print("\nREQUEST MESSAGE: ");
-          for (byte b: request_message ) System.out.printf("0x%02X ", b);
-          System.out.println();
+          System.out.println("Request Message Sent");
+          Thread.sleep(2000);
+          in.read(response_length);
+          length = java.nio.ByteBuffer.wrap(response_length).getInt();
+          byte[] response_header = new byte[9];
+          in.read(response_header);
+          if(response_header[0] == 0x07)System.out.println("File Piece Recieved");
+          byte[] file_peice = new byte[torrent.piece_length];
+          in.read(file_peice);
+
+          MessageDigest hash_function = MessageDigest.getInstance("SHA-1");
+          byte[] file_piece_hash = new byte[20];
+          file_piece_hash = hash_function.digest(file_peice);
+
+          byte[] valid_hash = torrent.piece_hashes[piece_index].array();
+
+          if(Arrays.equals(file_piece_hash,valid_hash))System.out.println("Valid Hash");
 
           out.close();
           in.close();
