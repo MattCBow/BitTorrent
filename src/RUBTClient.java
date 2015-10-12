@@ -204,7 +204,7 @@ public class RUBTClient {
                     byte[] file_piece_hash = new byte[20];
                     file_piece_hash = hash_function.digest(file_piece);
                     byte[] valid_hash = torrent.piece_hashes[piece_index].array();
-                    if(!Arrays.equals(file_piece_hash,valid_hash)){System.out.println("HASH");continue;}
+                    if(!Arrays.equals(file_piece_hash,valid_hash)){System.out.println("INCORRECT HASH");continue;}
 
                     //Send Have Message
                     byte[] have_message = new byte[9];
