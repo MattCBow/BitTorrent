@@ -21,7 +21,7 @@ public class BTTracker implements Runnable
     int downloaded;
     int interval;
     URL tracker_url;
-    ArrayList<BTPeer> peers;
+    ArrayList<BTConnection> connections;
 
     public BTTracker(BTLocalPeer local_peer, TorrentInfo torrent) throws IOException
     {
@@ -32,6 +32,7 @@ public class BTTracker implements Runnable
         this.downloaded=0;
         this.event="";
         this.escaped_info_hash = "";
+        this.connections = new ArrayList<BTConnection>();
         for (byte b : torrent.info_hash.array() ) this.escaped_info_hash += "%"+String.format("%02x", b & 0xff);
 
     }
@@ -63,13 +64,29 @@ public class BTTracker implements Runnable
                      System.out.printf("0x%02X ", b);
                      Thread.sleep(5);
                  }
-                 System.out.println();
+                 System.out.println("\n");
 
                    //Get list of peers from tracker
                  HashMap<ByteBuffer,Object> tracker_map = (HashMap<ByteBuffer, Object>) Bencoder2.decode(http_response);
                  ArrayList<HashMap<ByteBuffer,Object>> peer_array_list = (ArrayList<HashMap<ByteBuffer, Object>>) tracker_map.get(ByteBuffer.wrap("peers".getBytes()));
+                 Iterator<HashMap<ByteBuffer,Object>> it = peer_array_list.iterator();
+
+                 while (it.hasNext()) {
+                     HashMap<ByteBuffer,Object> peer = (HashMap<ByteBuffer, Object>) it.next();
+                     String id = new String(((ByteBuffer)peer.get(ByteBuffer.wrap("peer id".getBytes()))).array());
+                     if(id.substring(0,6).contains("RU")){
+                         String ip = new String(((ByteBuffer)peer.get(ByteBuffer.wrap("ip".getBytes()))).array());
+                         int port = (Integer) peer.get(ByteBuffer.wrap("port".getBytes()));
+                         BTConnection con = new BTConnection(local_peer, new BTPeer(id, ip, port), this);
+                         connections.add(con);
+                         con.start();
+                     }
+                 }
+
                  interval = (Integer)tracker_map.get(ByteBuffer.wrap("interval".getBytes()));
-                 Thread.sleep(2*interval);
+                 Thread.sleep(interval);
+
+                 end = true;
             }
             catch(MalformedURLException e){}
             catch(InterruptedException e) {}

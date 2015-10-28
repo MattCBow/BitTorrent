@@ -17,11 +17,15 @@ public class BTPeer
         ip = "";
         port = 0;
     }
-    
+
     public BTPeer(String peer_id, String peer_ip, int peer_port)
     {
         id = peer_id;
         ip = peer_ip;
         port = peer_port;
+    }
+
+    @Override public String toString(){
+        return (id+ " at "+ip+":"+port);
     }
 }
