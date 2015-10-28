@@ -18,10 +18,39 @@ public class RUBTClient {
 
         //Check if command arguments are valid
         if ( args.length != 2 || args[0].length()<8 || !args[0].substring(args[0].length() -8).equals(".torrent") ) {
-            System.out.println("Usage: java -cp . RUBTClient <torrent> <destination>");
+            System.out.println("Usage: java -cp out RUBTClient <torrent> <destination>");
             return;
         }
 
+        //Create Client Peer
+        BTLocalPeer local_peer = null;
+        try{
+            local_peer = new BTLocalPeer();
+        }
+        catch (Exception e){
+            System.out.println(e.getMessage());
+        }
+
+        //Open torrent file and initialize the destination file
+        byte[] torrentBytes = Files.readAllBytes(new File(args[0]).toPath());
+        TorrentInfo torrent = new TorrentInfo(torrentBytes);
+
+        BTTracker tracker = new BTTracker(local_peer, torrent);
+        System.out.println("\n"+tracker.local_peer.id +"\n"+tracker.local_peer.ip +"\n"+tracker.local_peer.port);
+
+        (new Thread(tracker)).start();
+        String input;
+        Scanner in = new Scanner(System.in);
+        while(!(input=in.nextLine()).equals("exit")){
+            System.out.println("RUNNING");
+        }
+
+        tracker.end();
+
+
+
+
+        /*
         try{
             //Declare my peer fields
     	    String my_peer_id = "MCB";
@@ -129,6 +158,7 @@ public class RUBTClient {
             if(!valid_handshake)throw new Exception("Error: Invalid Hanshake");
 
             //Send Interest Message to Peer
+            Thread.sleep( (Integer)tracker.get(ByteBuffer.wrap("interval".getBytes())) );
             byte[] interest_message = {0x00,0x00,0x00,0x01,0x02};
             out.write(interest_message);
 
@@ -255,5 +285,8 @@ public class RUBTClient {
                 System.out.println(e.getMessage());
             }
         System.out.println("\nExiting Program");
+
+        */
         }
-    }
+
+}
