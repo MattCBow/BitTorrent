@@ -69,7 +69,7 @@ public class BTTracker implements Runnable
                  HashMap<ByteBuffer,Object> tracker_map = (HashMap<ByteBuffer, Object>) Bencoder2.decode(http_response);
                  ArrayList<HashMap<ByteBuffer,Object>> peer_array_list = (ArrayList<HashMap<ByteBuffer, Object>>) tracker_map.get(ByteBuffer.wrap("peers".getBytes()));
                  interval = (Integer)tracker_map.get(ByteBuffer.wrap("interval".getBytes()));
-                 Thread.sleep(interval);
+                 Thread.sleep(2*interval);
             }
             catch(MalformedURLException e){}
             catch(InterruptedException e) {}
