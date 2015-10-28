@@ -61,7 +61,7 @@ public class BTTracker implements Runnable
                  System.out.println();
                  for(Byte b: http_response){
                      System.out.printf("0x%02X ", b);
-                     Thread.sleep(1);
+                     Thread.sleep(5);
                  }
                  System.out.println();
 
