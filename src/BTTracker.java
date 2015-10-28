@@ -59,7 +59,10 @@ public class BTTracker implements Runnable
                  in.close();
 
                  System.out.println();
-                 for(Byte b: http_response)System.out.printf("0x%02X ", b);
+                 for(Byte b: http_response){
+                     System.out.printf("0x%02X ", b);
+                     Thread.sleep(1);
+                 }
                  System.out.println();
 
                    //Get list of peers from tracker
